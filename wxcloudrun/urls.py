@@ -24,6 +24,12 @@ urlpatterns = (
     # 幸运数字接口
     re_path(r'^api/lucky(/)?$', views.lucky_numbers),
 
+    # 中奖号码录入接口
+    re_path(r'^api/record(/)?$', views.record_api),
+
+    # 录入页面
+    re_path(r'^record(/)?$', views.record_page),
+
     # 获取主页
     re_path(r'(/)?$', views.index),
 )

@@ -31,6 +31,7 @@
       border-radius: 20px;
       box-shadow: 0 8px 40px rgba(80, 60, 180, 0.10);
       padding: 40px 36px 36px;
+      position: relative;
     }
 
     .page-title {
@@ -167,9 +168,12 @@
   <div class="main-card w-100">
 
     <!-- Title -->
-    <div class="text-center mb-4">
-      <div class="page-title">🍀 幸运数字生成器</div>
-      <div class="page-subtitle">TOP15幸运号码抽取</div>
+    <div class="d-flex align-items-start justify-content-between mb-4">
+      <div class="text-center w-100">
+        <div class="page-title">🍀 幸运数字生成器</div>
+        <div class="page-subtitle">TOP15幸运号码抽取</div>
+      </div>
+      <a href="/record" title="录入中奖号码" style="position:absolute;right:36px;text-decoration:none;color:#bbb;font-size:20px;line-height:1;" onmouseover="this.style.color='#7c5cfc'" onmouseout="this.style.color='#bbb'">⚙</a>
     </div>
 
     <!-- Controls -->

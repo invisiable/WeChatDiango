@@ -11,6 +11,8 @@ from wxcloudrun.models import Counters
 
 logger = logging.getLogger('log')
 
+ADMIN_PASSWORD = '8888'
+
 # 幸运数字预测器路径（内嵌到项目中）
 _BASE_DIR = Path(__file__).resolve().parent.parent
 LUCKY_PREDICTOR_PATH = str(_BASE_DIR / 'wxcloudrun' / 'predictor')
@@ -18,13 +20,111 @@ LUCKY_DATA_PATH = str(_BASE_DIR / 'wxcloudrun' / 'data' / 'lucky_numbers.csv')
 
 
 def index(request, _):
-    """
-    获取主页
-
-     `` request `` 请求对象
-    """
-
+    """获取主页"""
     return render(request, 'index.html')
+
+
+def record_page(request, _=None):
+    """录入中奖号码页面"""
+    return render(request, 'record.html')
+
+
+def record_api(request, _=None):
+    """中奖号码录入 API：GET 返回最近记录，POST 写入新记录"""
+    if request.method == 'GET':
+        try:
+            import pandas as pd
+            df = pd.read_csv(LUCKY_DATA_PATH, encoding='utf-8-sig')
+            if len(df) == 0:
+                return JsonResponse({'code': 0, 'last': None, 'total': 0},
+                                    json_dumps_params={'ensure_ascii': False})
+            last = df.iloc[-1]
+            return JsonResponse({
+                'code': 0,
+                'last': {
+                    'date': str(last['date']),
+                    'number': int(last['number']),
+                    'animal': str(last['animal']),
+                    'element': str(last['element']),
+                },
+                'total': len(df),
+            }, json_dumps_params={'ensure_ascii': False})
+        except Exception as e:
+            return JsonResponse({'code': -1, 'errorMsg': str(e)},
+                                json_dumps_params={'ensure_ascii': False})
+
+    elif request.method == 'POST':
+        try:
+            body = json.loads(request.body.decode('utf-8'))
+
+            # ── 密码验证 ──────────────────────────────────────────────────
+            if body.get('password') != ADMIN_PASSWORD:
+                return JsonResponse({'code': 401, 'errorMsg': '密码错误'},
+                                    json_dumps_params={'ensure_ascii': False})
+
+            date_str = str(body.get('date', '')).strip()
+            number = body.get('number')
+            animal = str(body.get('animal', '')).strip()
+            element = str(body.get('element', '')).strip()
+
+            valid_animals = ['鼠', '牛', '虎', '兔', '龙', '蛇', '马', '羊', '猴', '鸡', '狗', '猪']
+            valid_elements = ['金', '木', '水', '火', '土']
+
+            if not date_str:
+                return JsonResponse({'code': -1, 'errorMsg': '日期不能为空'},
+                                    json_dumps_params={'ensure_ascii': False})
+
+            # 将 HTML date input 的 YYYY-MM-DD 转为 YYYY/M/D
+            from datetime import datetime as _dt
+            try:
+                d = _dt.strptime(date_str, '%Y-%m-%d')
+                formatted_date = f"{d.year}/{d.month}/{d.day}"
+            except ValueError:
+                return JsonResponse({'code': -1, 'errorMsg': '日期格式错误，请使用 YYYY-MM-DD'},
+                                    json_dumps_params={'ensure_ascii': False})
+
+            try:
+                number = int(number)
+                if not (1 <= number <= 49):
+                    raise ValueError()
+            except (ValueError, TypeError):
+                return JsonResponse({'code': -1, 'errorMsg': '号码必须在 1–49 之间'},
+                                    json_dumps_params={'ensure_ascii': False})
+
+            if animal not in valid_animals:
+                return JsonResponse({'code': -1, 'errorMsg': f'生肖无效: {animal}'},
+                                    json_dumps_params={'ensure_ascii': False})
+            if element not in valid_elements:
+                return JsonResponse({'code': -1, 'errorMsg': f'五行无效: {element}'},
+                                    json_dumps_params={'ensure_ascii': False})
+
+            import csv
+            # 确保文件末尾有换行符，防止新行粘连到上一行
+            with open(LUCKY_DATA_PATH, 'rb+') as f:
+                f.seek(0, 2)  # 移到文件末尾
+                if f.tell() > 0:
+                    f.seek(-1, 2)
+                    last_byte = f.read(1)
+                    if last_byte not in (b'\n', b'\r'):
+                        f.write(b'\n')
+            with open(LUCKY_DATA_PATH, 'a', encoding='utf-8-sig', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow([formatted_date, number, animal, element])
+
+            logger.info(f'record saved: {formatted_date},{number},{animal},{element}')
+            return JsonResponse({
+                'code': 0,
+                'message': f'保存成功：{formatted_date}  {number}号  {animal}  {element}',
+            }, json_dumps_params={'ensure_ascii': False})
+
+        except Exception as e:
+            import traceback
+            logger.error(f'record_api error: {traceback.format_exc()}')
+            return JsonResponse({'code': -1, 'errorMsg': str(e)},
+                                json_dumps_params={'ensure_ascii': False})
+
+    return JsonResponse({'code': -1, 'errorMsg': '方法不支持'},
+                        json_dumps_params={'ensure_ascii': False})
 
 
 def lucky_numbers(request, _=None):
