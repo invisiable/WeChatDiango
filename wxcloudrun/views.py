@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import sys
+from pathlib import Path
 
 from django.http import JsonResponse
 from django.shortcuts import render
@@ -10,9 +11,10 @@ from wxcloudrun.models import Counters
 
 logger = logging.getLogger('log')
 
-# 幸运数字预测器路径
-LUCKY_PREDICTOR_PATH = r'C:\Project\liuhe'
-LUCKY_DATA_PATH = os.path.join(LUCKY_PREDICTOR_PATH, 'data', 'lucky_numbers.csv')
+# 幸运数字预测器路径（内嵌到项目中）
+_BASE_DIR = Path(__file__).resolve().parent.parent
+LUCKY_PREDICTOR_PATH = str(_BASE_DIR / 'wxcloudrun' / 'predictor')
+LUCKY_DATA_PATH = str(_BASE_DIR / 'wxcloudrun' / 'data' / 'lucky_numbers.csv')
 
 
 def index(request, _):
@@ -36,29 +38,17 @@ def lucky_numbers(request, _=None):
                             json_dumps_params={'ensure_ascii': False})
 
     try:
-        body = {}
-        if request.body:
-            body = json.loads(request.body.decode('utf-8'))
-        selected_date = body.get('date', '')
-
-        # ── 1. 注入预测器路径并加载数据 ──────────────────────────────────
+        # ── 1. 加载数据 ──────────────────────────────────────────────────
         if LUCKY_PREDICTOR_PATH not in sys.path:
             sys.path.insert(0, LUCKY_PREDICTOR_PATH)
 
         import pandas as pd
-        import numpy as np
         from precise_top15_predictor import PreciseTop15Predictor
 
         df = pd.read_csv(LUCKY_DATA_PATH, encoding='utf-8-sig')
-        numbers = df['number'].values
-        total_records = len(numbers)
+        total_records = len(df)
 
-        # ── 2. 预测TOP15 ────────────────────────────────────────────────
-        predictor = PreciseTop15Predictor()
-        top15 = predictor.predict(numbers)
-
-        # ── 3. 计算当前SmartDynamic倍数（最优智能动态倍投 v3.1 参数）──
-        #   config同 lucky_number_gui.py 中 _run_optimal_smart_analysis()
+        # ── 2. 策略参数（与 GUI _run_optimal_smart_analysis 完全一致）──
         config = {
             'lookback': 12,
             'good_thresh': 0.35,
@@ -69,58 +59,99 @@ def lucky_numbers(request, _=None):
         }
         fib_sequence = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144]
 
-        # 从最新一期往前扫描确定 fib_index（命中即停）
-        fib_index = 0
-        for i in range(total_records - 1, max(total_records - 50, -1), -1):
-            period_numbers = numbers[:i]
-            if len(period_numbers) < 15:
-                break
-            pred = predictor.predict(period_numbers)
-            actual = numbers[i]
-            if actual in pred:
-                break  # 命中，fib_index已是正确值（连续未中次数）
-            fib_index += 1
-            if fib_index >= len(fib_sequence) - 1:
-                break
+        class SmartDynamic:
+            def __init__(self):
+                self.fib_index = 0
+                self.recent_results = []
 
-        # 统计最近lookback期命中率
-        lookback = config['lookback']
-        recent_hits = 0
-        eval_start = max(total_records - lookback, 1)
-        for i in range(eval_start, total_records):
-            period_numbers = numbers[:i]
-            if len(period_numbers) < 15:
-                continue
-            pred_check = predictor.predict(period_numbers)
-            if numbers[i] in pred_check:
-                recent_hits += 1
-        recent_sample = total_records - eval_start
-        recent_hit_rate = recent_hits / recent_sample if recent_sample > 0 else 0.33
+            def get_base_mult(self):
+                idx = min(self.fib_index, len(fib_sequence) - 1)
+                return float(min(fib_sequence[idx], config['max_multiplier']))
 
-        # 基础倍数（斐波那契）
-        base_mult = float(min(fib_sequence[min(fib_index, len(fib_sequence) - 1)],
-                              config['max_multiplier']))
+            def get_recent_rate(self):
+                if not self.recent_results:
+                    return 0.33
+                return sum(self.recent_results) / len(self.recent_results)
 
-        # 动态调整
-        if recent_hit_rate >= config['good_thresh']:
-            multiplier = min(base_mult * config['boost_mult'], config['max_multiplier'])
-        elif recent_hit_rate <= config['bad_thresh']:
-            multiplier = max(base_mult * config['reduce_mult'], 1.0)
+            def process(self, hit):
+                """计算本期倍数，然后更新状态（顺序与 GUI process_period 一致）"""
+                base_mult = self.get_base_mult()
+                if len(self.recent_results) >= config['lookback']:
+                    rate = self.get_recent_rate()
+                    if rate >= config['good_thresh']:
+                        mult = min(base_mult * config['boost_mult'], config['max_multiplier'])
+                    elif rate <= config['bad_thresh']:
+                        mult = max(base_mult * config['reduce_mult'], 1.0)
+                    else:
+                        mult = base_mult
+                else:
+                    mult = base_mult
+                # 更新 fib_index（先于 recent_results，与 GUI 一致）
+                if hit:
+                    self.fib_index = 0
+                else:
+                    self.fib_index += 1
+                self.recent_results.append(1 if hit else 0)
+                if len(self.recent_results) > config['lookback']:
+                    self.recent_results.pop(0)
+                return round(float(mult), 2)
+
+        # ── 3. 回测（与 GUI 完全一致：最近 300 期，调用 update_performance）
+        predictor = PreciseTop15Predictor()
+        test_periods = min(300, total_records - 50)
+        start_idx = total_records - test_periods
+
+        hit_sequence = []
+        for i in range(start_idx, total_records):
+            train_data = df.iloc[:i]['number'].values
+            predictions = predictor.predict(train_data)
+            actual = int(df.iloc[i]['number'])
+            hit = actual in predictions
+            predictor.update_performance(predictions, actual)
+            hit_sequence.append(hit)
+
+        # ── 4. 暂停策略模拟（命中1停1期，与 GUI simulate_with_pause 一致）
+        pause_strategy = SmartDynamic()
+        pause_remaining = 0
+        last_result = 'LOSS'
+        for hit in hit_sequence:
+            if pause_remaining > 0:
+                pause_remaining -= 1
+                continue  # 暂停期：不投注，不更新策略状态
+            pause_strategy.process(hit)
+            last_result = 'WIN' if hit else 'LOSS'
+            if hit:
+                pause_remaining = 1  # 命中后下一期暂停
+
+        # ── 5. 用全量数据（含 update_performance 后的状态）生成下期 TOP15
+        all_numbers = df['number'].values
+        top15 = predictor.predict(all_numbers)
+
+        # ── 6. 计算下期倍数与星级 ────────────────────────────────────────
+        if last_result == 'WIN':
+            # 上期命中 → 本期暂停，不投注
+            multiplier = 0.0
+            stars = 0
         else:
-            multiplier = base_mult
-        multiplier = round(float(multiplier), 2)
-
-        # ── 4. 倍数映射星级（1x-2x→1星 … 8x-10x→5星）─────────────────
-        if multiplier < 2:
-            stars = 1
-        elif multiplier < 4:
-            stars = 2
-        elif multiplier < 6:
-            stars = 3
-        elif multiplier < 8:
-            stars = 4
-        else:
-            stars = 5
+            rate = pause_strategy.get_recent_rate()
+            base_mult = pause_strategy.get_base_mult()
+            if rate >= config['good_thresh']:
+                multiplier = min(base_mult * config['boost_mult'], config['max_multiplier'])
+            elif rate <= config['bad_thresh']:
+                multiplier = max(base_mult * config['reduce_mult'], 1.0)
+            else:
+                multiplier = base_mult
+            multiplier = round(float(multiplier), 2)
+            if multiplier < 2:
+                stars = 1
+            elif multiplier < 4:
+                stars = 2
+            elif multiplier < 6:
+                stars = 3
+            elif multiplier < 8:
+                stars = 4
+            else:
+                stars = 5
 
         logger.info(f'lucky_numbers: top15={top15}, multiplier={multiplier}, stars={stars}')
         return JsonResponse({
@@ -129,7 +160,6 @@ def lucky_numbers(request, _=None):
             'multiplier': multiplier,
             'stars': stars,
             'total_records': total_records,
-            'selected_date': selected_date,
         }, json_dumps_params={'ensure_ascii': False})
 
     except Exception as e:

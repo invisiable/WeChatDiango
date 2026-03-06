@@ -47,21 +47,6 @@
     }
 
     /* ─── Controls ──────────────────────────────────────────── */
-    .date-input {
-      border-radius: 10px;
-      border: 1.5px solid #e0e0e0;
-      padding: 10px 14px;
-      font-size: 15px;
-      color: #2c2c3e;
-      background: #fafafa;
-      transition: border-color .2s;
-    }
-    .date-input:focus {
-      border-color: #7c5cfc;
-      box-shadow: 0 0 0 3px rgba(124, 92, 252, .12);
-      outline: none;
-    }
-
     .btn-generate {
       background: linear-gradient(90deg, #7c5cfc 0%, #5a9cfc 100%);
       border: none;
@@ -184,12 +169,11 @@
     <!-- Title -->
     <div class="text-center mb-4">
       <div class="page-title">🍀 幸运数字生成器</div>
-      <div class="page-subtitle">最优智能投注策略 · TOP15幸运号码预测</div>
+      <div class="page-subtitle">TOP15幸运号码抽取</div>
     </div>
 
     <!-- Controls -->
     <div class="d-flex gap-3 flex-wrap justify-content-center mb-4">
-      <input id="date-picker" type="date" class="date-input" />
       <button id="btn-generate" class="btn-generate d-flex align-items-center gap-2" onclick="generateNumbers()">
         <span id="btn-text">生成幸运数字</span>
         <span id="btn-spinner" class="spinner-border spinner-border-sm d-none" role="status"></span>
@@ -233,21 +217,12 @@
 </div>
 
 <script>
-  // Set default date to today
-  (function () {
-    const d = new Date();
-    const pad = n => String(n).padStart(2, '0');
-    document.getElementById('date-picker').value =
-      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  })();
-
   async function generateNumbers() {
     const btn = document.getElementById('btn-generate');
     const btnText = document.getElementById('btn-text');
     const spinner = document.getElementById('btn-spinner');
     const errorBox = document.getElementById('error-box');
     const resultPanel = document.getElementById('result-panel');
-    const date = document.getElementById('date-picker').value;
 
     // Loading state
     btn.disabled = true;
@@ -260,7 +235,7 @@
       const resp = await fetch('/api/lucky', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date })
+        body: JSON.stringify({})
       });
       const data = await resp.json();
       if (data.code !== 0) throw new Error(data.errorMsg || '预测失败');
@@ -279,9 +254,7 @@
     const { numbers, multiplier, stars, total_records, selected_date } = data;
 
     // Context text
-    let ctx = `基于 ${total_records} 期历史数据`;
-    if (selected_date) ctx += `　·　日期：${selected_date}`;
-    document.getElementById('result-context').textContent = ctx;
+    document.getElementById('result-context').textContent = `基于 ${total_records} 期历史数据`;
 
     // Stars row (5 total)
     const starsRow = document.getElementById('stars-row');
@@ -314,10 +287,6 @@
       bubble.appendChild(numSpan);
       grid.appendChild(bubble);
     });
-
-    // Info note
-    document.getElementById('info-note').textContent =
-      `幸运倍数 ${multiplier}x  ·  推荐购买 TOP5（金色）号码`;
 
     // Show panel
     document.getElementById('result-panel').style.display = 'block';
