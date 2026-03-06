@@ -1,0 +1,328 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
+    integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous" />
+  <title>幸运数字生成器</title>
+  <style>
+    :root {
+      --gold: #f5a623;
+      --gold-light: #fff8e8;
+      --orange: #f07c1b;
+      --blue: #4a90d9;
+      --blue-light: #eaf3ff;
+      --star-on: #f5a623;
+      --star-off: #d0d0d0;
+    }
+
+    body {
+      background: linear-gradient(135deg, #f0f4ff 0%, #faf7ff 100%);
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+        "Microsoft YaHei", sans-serif;
+    }
+
+    .main-card {
+      max-width: 560px;
+      background: #fff;
+      border-radius: 20px;
+      box-shadow: 0 8px 40px rgba(80, 60, 180, 0.10);
+      padding: 40px 36px 36px;
+    }
+
+    .page-title {
+      font-size: 26px;
+      font-weight: 700;
+      color: #2c2c3e;
+      letter-spacing: 1px;
+    }
+
+    .page-subtitle {
+      font-size: 13px;
+      color: #888;
+      margin-top: 4px;
+    }
+
+    /* ─── Controls ──────────────────────────────────────────── */
+    .date-input {
+      border-radius: 10px;
+      border: 1.5px solid #e0e0e0;
+      padding: 10px 14px;
+      font-size: 15px;
+      color: #2c2c3e;
+      background: #fafafa;
+      transition: border-color .2s;
+    }
+    .date-input:focus {
+      border-color: #7c5cfc;
+      box-shadow: 0 0 0 3px rgba(124, 92, 252, .12);
+      outline: none;
+    }
+
+    .btn-generate {
+      background: linear-gradient(90deg, #7c5cfc 0%, #5a9cfc 100%);
+      border: none;
+      border-radius: 12px;
+      color: #fff;
+      font-size: 16px;
+      font-weight: 600;
+      padding: 11px 28px;
+      letter-spacing: 1px;
+      transition: opacity .2s, transform .1s;
+    }
+    .btn-generate:hover:not(:disabled) { opacity: .9; transform: translateY(-1px); }
+    .btn-generate:disabled { opacity: .65; cursor: not-allowed; }
+
+    /* ─── Number bubbles ─────────────────────────────────────── */
+    #result-panel { display: none; }
+
+    .numbers-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+      margin-top: 8px;
+    }
+
+    .num-bubble {
+      aspect-ratio: 1;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 700;
+      transition: transform .15s;
+      cursor: default;
+      position: relative;
+    }
+    .num-bubble:hover { transform: scale(1.08); }
+
+    /* Top 1-5: gold */
+    .num-bubble.tier-1 {
+      background: linear-gradient(135deg, #ffe066 0%, #f5a623 100%);
+      color: #7a4a00;
+      box-shadow: 0 3px 10px rgba(245, 166, 35, .40);
+    }
+    /* Top 6-10: orange */
+    .num-bubble.tier-2 {
+      background: linear-gradient(135deg, #ffcf86 0%, #f07c1b 100%);
+      color: #7a2e00;
+      box-shadow: 0 3px 10px rgba(240, 124, 27, .30);
+    }
+    /* Top 11-15: blue */
+    .num-bubble.tier-3 {
+      background: linear-gradient(135deg, #a8d0ff 0%, #4a90d9 100%);
+      color: #002d6e;
+      box-shadow: 0 3px 10px rgba(74, 144, 217, .30);
+    }
+
+    .rank-badge {
+      position: absolute;
+      top: 2px;
+      right: 3px;
+      font-size: 9px;
+      font-weight: 600;
+      opacity: .65;
+    }
+
+    /* ─── Star rating ─────────────────────────────────────────── */
+    .lucky-bar {
+      background: linear-gradient(90deg, var(--gold-light) 0%, #fff 100%);
+      border: 1.5px solid #ffe0a0;
+      border-radius: 14px;
+      padding: 14px 20px;
+    }
+    .lucky-label {
+      font-size: 13px;
+      color: #999;
+      font-weight: 500;
+    }
+    .star {
+      font-size: 26px;
+      line-height: 1;
+    }
+    .star.on  { color: var(--star-on); }
+    .star.off { color: var(--star-off); }
+    .multiplier-text {
+      font-size: 22px;
+      font-weight: 800;
+      color: #d4740a;
+      letter-spacing: .5px;
+    }
+    .multiplier-unit {
+      font-size: 13px;
+      font-weight: 500;
+      color: #888;
+    }
+
+    /* ─── Legend ──────────────────────────────────────────────── */
+    .legend-dot {
+      display: inline-block;
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      vertical-align: middle;
+      margin-right: 4px;
+    }
+
+    /* ─── Error / info alerts ─────────────────────────────────── */
+    .info-text {
+      font-size: 12px;
+      color: #aaa;
+      text-align: center;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+
+<body>
+<div class="container py-5 d-flex justify-content-center">
+  <div class="main-card w-100">
+
+    <!-- Title -->
+    <div class="text-center mb-4">
+      <div class="page-title">🍀 幸运数字生成器</div>
+      <div class="page-subtitle">最优智能投注策略 · TOP15幸运号码预测</div>
+    </div>
+
+    <!-- Controls -->
+    <div class="d-flex gap-3 flex-wrap justify-content-center mb-4">
+      <input id="date-picker" type="date" class="date-input" />
+      <button id="btn-generate" class="btn-generate d-flex align-items-center gap-2" onclick="generateNumbers()">
+        <span id="btn-text">生成幸运数字</span>
+        <span id="btn-spinner" class="spinner-border spinner-border-sm d-none" role="status"></span>
+      </button>
+    </div>
+
+    <!-- Error alert -->
+    <div id="error-box" class="alert alert-danger d-none py-2 px-3 rounded-3" style="font-size:14px;"></div>
+
+    <!-- Result panel -->
+    <div id="result-panel">
+      <!-- Context: date + count -->
+      <div class="text-muted mb-3" id="result-context" style="font-size:13px;text-align:center;"></div>
+
+      <!-- Star / multiplier bar -->
+      <div class="lucky-bar d-flex align-items-center justify-content-between mb-4">
+        <div>
+          <div class="lucky-label">幸运值</div>
+          <div id="stars-row" class="d-flex gap-1 mt-1"></div>
+        </div>
+        <div class="text-end">
+          <span class="multiplier-text" id="multiplier-val"></span>
+          <span class="multiplier-unit"> 倍幸运</span>
+        </div>
+      </div>
+
+      <!-- Legend -->
+      <div class="d-flex gap-3 justify-content-center mb-3" style="font-size:12px;color:#888">
+        <span><span class="legend-dot" style="background:linear-gradient(135deg,#ffe066,#f5a623)"></span>前5强</span>
+        <span><span class="legend-dot" style="background:linear-gradient(135deg,#ffcf86,#f07c1b)"></span>次5强</span>
+        <span><span class="legend-dot" style="background:linear-gradient(135deg,#a8d0ff,#4a90d9)"></span>备选5强</span>
+      </div>
+
+      <!-- Number bubbles grid -->
+      <div class="numbers-grid" id="numbers-grid"></div>
+
+      <div class="info-text" id="info-note"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // Set default date to today
+  (function () {
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    document.getElementById('date-picker').value =
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  })();
+
+  async function generateNumbers() {
+    const btn = document.getElementById('btn-generate');
+    const btnText = document.getElementById('btn-text');
+    const spinner = document.getElementById('btn-spinner');
+    const errorBox = document.getElementById('error-box');
+    const resultPanel = document.getElementById('result-panel');
+    const date = document.getElementById('date-picker').value;
+
+    // Loading state
+    btn.disabled = true;
+    btnText.textContent = '生成中…';
+    spinner.classList.remove('d-none');
+    errorBox.classList.add('d-none');
+    resultPanel.style.display = 'none';
+
+    try {
+      const resp = await fetch('/api/lucky', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date })
+      });
+      const data = await resp.json();
+      if (data.code !== 0) throw new Error(data.errorMsg || '预测失败');
+      renderResult(data);
+    } catch (err) {
+      errorBox.textContent = '⚠ ' + err.message;
+      errorBox.classList.remove('d-none');
+    } finally {
+      btn.disabled = false;
+      btnText.textContent = '生成幸运数字';
+      spinner.classList.add('d-none');
+    }
+  }
+
+  function renderResult(data) {
+    const { numbers, multiplier, stars, total_records, selected_date } = data;
+
+    // Context text
+    let ctx = `基于 ${total_records} 期历史数据`;
+    if (selected_date) ctx += `　·　日期：${selected_date}`;
+    document.getElementById('result-context').textContent = ctx;
+
+    // Stars row (5 total)
+    const starsRow = document.getElementById('stars-row');
+    starsRow.innerHTML = '';
+    for (let i = 1; i <= 5; i++) {
+      const s = document.createElement('span');
+      s.className = 'star ' + (i <= stars ? 'on' : 'off');
+      s.textContent = i <= stars ? '★' : '☆';
+      starsRow.appendChild(s);
+    }
+    document.getElementById('multiplier-val').textContent = multiplier + 'x';
+
+    // Number bubbles
+    const grid = document.getElementById('numbers-grid');
+    grid.innerHTML = '';
+    numbers.forEach((n, idx) => {
+      const tier = idx < 5 ? 1 : idx < 10 ? 2 : 3;
+      const bubble = document.createElement('div');
+      bubble.className = `num-bubble tier-${tier}`;
+      bubble.title = `排名第 ${idx + 1}`;
+
+      const rankSpan = document.createElement('span');
+      rankSpan.className = 'rank-badge';
+      rankSpan.textContent = '#' + (idx + 1);
+
+      const numSpan = document.createElement('span');
+      numSpan.textContent = n;
+
+      bubble.appendChild(rankSpan);
+      bubble.appendChild(numSpan);
+      grid.appendChild(bubble);
+    });
+
+    // Info note
+    document.getElementById('info-note').textContent =
+      `幸运倍数 ${multiplier}x  ·  推荐购买 TOP5（金色）号码`;
+
+    // Show panel
+    document.getElementById('result-panel').style.display = 'block';
+  }
+</script>
+
+</body>
+</html>
